@@ -56,3 +56,43 @@ status_phrases:
 # The very first run looks this far back for status emails,
 # to catch jobs you already applied to. Later runs only read new emails.
 first_run_status_lookback_days: 90
+
+# Stage 4: filters.
+filters:
+  # Titles with any of these words are too senior (whole-word match).
+  too_senior_words:
+    - Principal
+    - Staff
+    - Director
+    - VP
+    - Vice President
+    - Head of
+  # Titles with any of these are clearly unrelated (free, no AI needed).
+  unrelated_keywords:
+    - nurse
+    - nursing
+    - RN
+    - LPN
+    - driver
+    - CDL
+    - sales representative
+    - sales rep
+    - cashier
+    - technician
+    - warehouse associate
+    - warehouse worker
+    - mechanic
+  # Jobs paying less than this (top of range) are kept but flagged.
+  salary_floor: 100000
+  # The roles you want. Claude uses this list to catch other unrelated titles.
+  target_roles:
+    - Data Engineer
+    - Analytics Engineer
+    - Data Architect
+    - AI Engineer
+    - Data Analyst
+    - BI / Analytics developer, lead, or manager
+    - Database Administrator / Developer (SQL Server)
+    - Technical Program Manager / Technical Project Manager
+    - Product Manager (data or technical)
+    - Data team lead or manager

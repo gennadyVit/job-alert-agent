@@ -3,8 +3,8 @@ main.py
 Runs the whole pipeline once. This is the file you run:
     python main.py
 
-Current version: stages 1-3 (read alerts, extract jobs, dedupe, save, status).
-Filters, descriptions, scoring, and the digest email get added in steps 4-7.
+Current version: stages 1-4 (read alerts, extract jobs, dedupe, status, filters).
+Descriptions, scoring, and the digest email get added in steps 5-7.
 """
 
 import os
@@ -21,6 +21,7 @@ from gmail_client import (
     PROJECT_FOLDER, build_alert_query, get_gmail_service,
     get_message_bodies, list_message_ids, load_config,
 )
+from filters import apply_filters
 from status import find_status_events
 from store import Store
 
@@ -80,12 +81,17 @@ def main():
         all_jobs = [job for jobs in pool.map(extract, emails) for job in jobs]
     print(f"Alert emails: {len(emails)} read, {len(all_jobs)} jobs found")
 
-    # 5. Drop jobs we've seen before or already applied to, then save the rest.
+    # 5. Drop jobs we've seen before or already applied to.
     new_jobs, skipped = remove_duplicates(all_jobs, store.get_known_job_keys())
-    store.append_rows("jobs", new_jobs)
     print(f"New jobs: {len(new_jobs)}  (skipped {skipped} already seen or applied)")
 
-    # 6. Log this run.
+    # 6. Filters. Every new job is saved, including filtered ones (with the
+    #    reason), so they are never treated as new again.
+    kept_jobs, reasons = apply_filters(new_jobs, claude, config)
+    store.append_rows("jobs", new_jobs)
+    print(f"After filters: {len(kept_jobs)} kept, filtered out: {dict(reasons)}")
+
+    # 7. Log this run.
     store.append_rows("runs", [{
         "run_time": run_start,
         "alert_emails_read": len(emails),

@@ -37,6 +37,10 @@ TABLES = {
         ("link", "STRING"),
         ("job_id", "STRING"),
         ("email_id", "STRING"),
+        # Filled in by stage 4 (filters).
+        ("filter_reason", "STRING"),   # "" = passed, "too senior", "unrelated"
+        ("salary_flag", "STRING"),
+        ("remote_group", "STRING"),    # Remote, Onsite/Hybrid, Unknown
         # Filled in by step 6 (scoring).
         ("experience_fit", "INT64"),
         ("preferences_fit", "INT64"),
@@ -105,8 +109,18 @@ class Store:
             table = self.client.create_table(
                 bigquery.Table(self.table_id(name), schema=schema), exists_ok=True
             )
+
+            # If we've added columns to TABLES since the table was created,
+            # add them to the real table too (like ALTER TABLE ADD COLUMN).
+            existing = {field.name for field in table.schema}
+            missing = [field for field in schema if field.name not in existing]
+            fields_to_update = ["expires"]
+            if missing:
+                table.schema = list(table.schema) + missing
+                fields_to_update.append("schema")
+
             table.expires = expires
-            self.client.update_table(table, ["expires"])
+            self.client.update_table(table, fields_to_update)
 
         return expires
 
