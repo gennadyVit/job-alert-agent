@@ -1,0 +1,11 @@
+# Python packages this project needs. Install them with:
+#   pip install -r requirements.txt
+
+google-api-python-client   # talks to Gmail
+google-auth                # handles Google login tokens
+google-auth-oauthlib       # only used once, by get_refresh_token.py
+google-cloud-bigquery      # stores jobs (used in step 3)
+anthropic                  # Claude API (used in step 2)
+requests                   # fetching web pages (used in step 5)
+pyyaml                     # reads config.yaml
+python-dotenv              # reads secrets from a local .env file

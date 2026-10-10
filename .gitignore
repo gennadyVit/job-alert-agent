@@ -1,0 +1,13 @@
+# Secrets: never commit these
+.env
+credentials.json
+token.json
+
+# Python clutter
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Real emails from my inbox (personal data); tests use them locally only
+tests/sample_emails/

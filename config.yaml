@@ -1,0 +1,58 @@
+# config.yaml
+# Settings you can change without touching Python code.
+# YAML basics: "key: value" pairs, and lists use "- item" lines.
+
+# Which email senders count as job alerts.
+# To add a new job board, add one more "- address" line.
+# Note: if you forward LinkedIn alerts from your second email using
+# automatic forwarding, the original "From" address is kept, so they
+# will still match the LinkedIn senders below.
+#
+# jobs-noreply@linkedin.com is NOT listed here on purpose: checked on
+# Oct 7, 2026, it sends "your application was sent" confirmations,
+# not alerts. Stage 3 uses those emails to detect jobs you applied to.
+alert_senders:
+  - jobalerts-noreply@linkedin.com
+  - donotreply@jobalert.indeed.com
+  - donotreply@match.indeed.com
+  - support@builtin.com
+  - dice@connect.dice.com
+  - team@hi.wellfound.com
+
+# You run this on demand, not on a schedule. Each run picks up where the
+# last run left off (the last run time is saved in the Google Sheet, step 3).
+# This setting is only used when there is no previous run yet.
+first_run_lookback_days: 7
+
+# Which Claude model does which job.
+# Haiku is cheap and good at simple reading; Sonnet is smarter for judging fit.
+models:
+  extract: claude-haiku-5-5     # stage 2: pull jobs out of emails
+  describe: claude-haiku-5-5    # stage 5: find full job descriptions
+  score: claude-sonnet-5-5      # stage 6: score each job against your profile
+  status: claude-haiku-5-5      # stage 3: read application / rejection / interview emails
+
+# Where jobs are stored (BigQuery, free sandbox mode).
+bigquery:
+  project: job-alert-agent-511001
+  dataset: job_alerts
+
+# Stage 3: emails that change a job's status.
+# Gmail is searched for ANY of these phrases; Claude then reads each match
+# and decides if it's really an application, rejection, or interview email.
+status_phrases:
+  - "your application was sent"
+  - "thank you for applying"
+  - "thanks for applying"
+  - "application received"
+  - "received your application"
+  - "unfortunately"
+  - "not moving forward"
+  - "other candidates"
+  - "schedule an interview"
+  - "interview invitation"
+  - "next steps"
+
+# The very first run looks this far back for status emails,
+# to catch jobs you already applied to. Later runs only read new emails.
+first_run_status_lookback_days: 90
