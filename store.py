@@ -46,7 +46,7 @@ TABLES = {
         ("description_source", "STRING"),
         ("description_url", "STRING"),
         ("criteria", "STRING"),        # JSON text; query it with JSON_VALUE / JSON_QUERY_ARRAY
-        # Filled in by step 6 (scoring).
+        # Filled in by stage 6 (scoring). Lists are JSON text.
         ("experience_fit", "INT64"),
         ("preferences_fit", "INT64"),
         ("python_risk", "STRING"),
@@ -54,6 +54,13 @@ TABLES = {
         ("top_gaps", "STRING"),
         ("take", "STRING"),
         ("flags", "STRING"),
+        ("company_summary", "STRING"),
+        ("salary_is_estimate", "BOOL"),
+        ("salary_range_low", "INT64"),
+        ("salary_range_high", "INT64"),
+        ("salary_ask", "INT64"),
+        ("best_resume", "STRING"),
+        ("resume_improvements", "STRING"),
     ],
     "status_events": [
         ("email_id", "STRING"),

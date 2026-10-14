@@ -3,8 +3,8 @@ main.py
 Runs the whole pipeline once. This is the file you run:
     python main.py
 
-Current version: stages 1-5 (read alerts, extract, dedupe, status, filters, descriptions).
-Scoring and the digest email get added in steps 6-7.
+Stages: read alerts, extract, dedupe, status, filters, descriptions,
+scoring, and the digest email.
 """
 
 import os
@@ -16,13 +16,15 @@ import anthropic
 from dotenv import load_dotenv
 
 from dedupe import remove_duplicates
+from digest import build_digest, send_digest
 from extract import extract_jobs, get_email_text, source_from_sender
 from gmail_client import (
     PROJECT_FOLDER, build_alert_query, get_gmail_service,
     get_message_bodies, list_message_ids, load_config,
 )
 from describe_agent import describe_jobs
-from filters import apply_filters
+from filters import apply_filters, salary_flag
+from score import score_jobs
 from status import find_status_events
 from store import Store
 
@@ -93,19 +95,31 @@ def main():
     # 7. Find each kept job's posting and pull out the facts for scoring.
     usage = describe_jobs(kept_jobs, claude, config)
     found = sum(1 for job in kept_jobs if job["description_found"])
-    # The posting may show a salary the email didn't; re-check the hard floor.
+    # The posting may show a salary the email didn't; update the salary flag.
     for job in kept_jobs:
-        if job["salary_max"] and job["salary_max"] < config["filters"]["salary_floor"]:
-            job["filter_reason"] = "below salary floor"
+        job["salary_flag"] = salary_flag(
+            job, config["filters"]["salary_floor"], config["filters"]["salary_target"]
+        )
     # Haiku: $0.10 / $0.50 per million tokens in / out; web search: $0.01 each.
     cost = usage["input_tokens"] / 1e6 * 0.10 + usage["output_tokens"] / 1e6 * 0.50 + usage["searches"] * 0.01
     print(f"Postings found: {found}/{len(kept_jobs)}  ({usage['searches']} web searches, ${cost:.2f})")
 
-    # 8. Save every new job, including filtered ones (with the reason),
+    # 8. Score each kept job against the rubric and resumes (Claude Sonnet).
+    scoring = score_jobs(kept_jobs, claude, config)
+    print(f"Scored: {scoring.get('scored', 0)}/{len(kept_jobs)}  (${scoring['cost']:.2f})")
+
+    # 9. Save every new job, including filtered ones (with the reason),
     #    so they are never treated as new again.
     store.append_rows("jobs", new_jobs)
 
-    # 9. Log this run.
+    # 10. Email the digest to myself.
+    filtered_counts = dict(reasons)
+    filtered_counts["already seen or applied"] = skipped
+    subject, html = build_digest(kept_jobs, filtered_counts, config)
+    send_digest(gmail, subject, html)
+    print(f"Digest sent: {subject}")
+
+    # 11. Log this run.
     store.append_rows("runs", [{
         "run_time": run_start,
         "alert_emails_read": len(emails),

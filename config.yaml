@@ -83,8 +83,9 @@ filters:
     - warehouse worker
     - mechanic
   # Salary, judged by the top of the posted range (jobs with no salary are kept).
-  salary_floor: 100000    # hard: below this, the job is filtered out
-  salary_target: 120000   # soft: below this, the job is kept but flagged
+  salary_floor: 100000    # below this: flagged, listed at the end of the digest
+  salary_target: 120000   # below this: flagged, scored a bit lower
+  below_floor_min_fit: 75 # below-floor jobs appear in the digest only at this experience fit or higher
   # The roles you want. Claude uses this list to catch other unrelated titles.
   target_roles:
     - Data Engineer
@@ -97,3 +98,9 @@ filters:
     - Technical Program Manager / Technical Project Manager
     - Product Manager (data or technical)
     - Data team lead or manager
+
+# Stage 7: the digest email (scores are 0-100).
+digest:
+  apply_experience_min: 70   # "Apply today": experience fit at least this...
+  apply_preferences_min: 60  # ...and preferences fit at least this
+  maybe_experience_min: 55   # "Maybe": experience fit at least this (not in Apply today)
