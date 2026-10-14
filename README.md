@@ -26,9 +26,9 @@ flowchart LR
 | 1. Read | Gmail API pulls alert emails since the last run | Done |
 | 2. Extract | Claude returns structured JSON per job (company, title, location, remote, salary, link) | Done |
 | 3. Dedupe + status | Skips seen jobs; reads confirmation, rejection and interview emails to track application status automatically | Done |
-| 4. Filter | Seniority, remote vs. onsite, salary floor, unrelated roles | Next |
-| 5. Describe | Agent finds the full posting (job board page, Greenhouse/Lever/Ashby APIs, careers page) | Planned |
-| 6. Score | Fit scores, Python-test risk, top gaps, red flags | Planned |
+| 4. Filter | Seniority, unrelated roles (keywords, then one Claude call), $100K hard floor / $120K soft target, remote grouping | Done |
+| 5. Describe | Tool-using agent finds the posting (job board page, web search, Greenhouse/Lever/Ashby APIs) and extracts evaluation criteria, not the full text | Done |
+| 6. Score | Experience and preferences fit, Python-test risk, top gaps, unusual notes, best resume version | Next |
 | 7. Digest | HTML email: Apply today / Maybe / Onsite / Filtered out | Planned |
 | 8. Run button | GitHub Actions manual trigger | Planned |
 
@@ -44,7 +44,12 @@ Every Claude call uses a JSON schema (`output_config.format`), so responses alwa
 Application confirmations, rejections and interview invites are classified by Claude and stored as events. A job's current status is computed with SQL (latest matching event, using `QUALIFY ROW_NUMBER()`), never stored, so it can't drift out of sync.
 
 **Append-only BigQuery tables on the free sandbox.**
-The sandbox allows no streaming inserts or UPDATE statements, and deletes tables 60 days after their expiration date. The pipeline adds rows only with batch load jobs, and resets each table's expiration to the 60-day maximum on every run. I tested this before relying on it: extending the date up to 60 days is allowed, and anything longer is rejected without billing.
+The sandbox allows no streaming inserts or UPDATE statements, and deletes every table 60 days after it was created. The pipeline adds rows only with batch load jobs. On every run it rebuilds each table with `CREATE OR REPLACE TABLE t AS SELECT * FROM t`, which keeps the rows and restarts the 60-day clock.
+
+My first approach, pushing the expiration date out, passed a test on a brand-new table but failed on a 5-day-old one: the limit counts from creation, not from today. Re-testing on an aged table caught it, and the rebuild approach replaced it.
+
+**The agent extracts criteria, not descriptions.**
+Scoring needs facts like must-have skills, Python expectations, management scope, remote rules and travel, not 2,000 words of marketing copy. The Haiku agent returns a compact JSON of those facts, so the Sonnet scoring call is smaller, cheaper and more focused. The criteria are stored as JSON in BigQuery and can be queried with `JSON_VALUE` / `JSON_QUERY_ARRAY`.
 
 **Right-sized models.**
 Claude Haiku handles high-volume reading (extraction, status emails). Claude Sonnet handles the judgment call (scoring). Expected cost is about $1 per run.
@@ -69,6 +74,9 @@ extract.py           stage 2: email -> jobs (HTML to text, link labels, tracking
 dedupe.py            stage 3: normalized job keys
 status.py            stage 3: classify application, rejection and interview emails
 store.py             BigQuery: tables, load jobs, status SQL
+filters.py           stage 4: seniority, relevance, salary, remote
+describe_agent.py    stage 5: tool-using agent -> criteria JSON
+resumes.py           reads resume .docx files (kept out of git)
 config.yaml          senders, phrases, models, thresholds (no code changes needed)
 get_refresh_token.py one-time Google OAuth login (writes to .env)
 save_samples.py      saves real emails locally as test fixtures
