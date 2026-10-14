@@ -208,6 +208,8 @@ Rules:
   Convert hourly pay to yearly by multiplying by 2080.
   If only one number is given, use it for both. null if no salary is shown.
 - link_label: the label (like "L7") of the link that opens that job's page.
+  A job's link always comes AFTER that job's title, and BEFORE the next job's
+  title. Never use a link that appears above the job's title.
   null if the job has no link of its own."""
 
 
@@ -241,8 +243,27 @@ def extract_jobs(client, model, email_text, source):
         raw_link = links.get(job.pop("link_label") or "", "")
         job["link"], job["job_id"] = clean_link(raw_link) if raw_link else ("", "")
         job["source"] = source
+        if not link_matches_title(job["link"], job["title"]):
+            # Better no link than the wrong one; stage 5 will search instead.
+            job["link"], job["job_id"] = "", ""
 
     return jobs, response.usage
+
+
+def link_matches_title(link, title):
+    """
+    Built In links contain the job title, e.g.
+        builtin.com/job/senior-technical-program-manager/11536889
+    so we can check that a link really belongs to its job. Other sites'
+    links don't contain the title, so for them we always say "matches".
+    """
+    match = re.search(r"builtin\.com/job/([^/]+)/", link)
+    if not match:
+        return True
+    slug_words = set(match.group(1).split("-"))
+    title_words = set(re.sub(r"[^a-z0-9]+", " ", title.lower()).split())
+    # The link's words should mostly appear in the title.
+    return len(slug_words & title_words) >= 0.6 * len(slug_words)
 
 
 def source_from_sender(sender):

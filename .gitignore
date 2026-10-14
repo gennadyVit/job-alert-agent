@@ -11,3 +11,4 @@ venv/
 
 # Real emails from my inbox (personal data); tests use them locally only
 tests/sample_emails/
+resumes/

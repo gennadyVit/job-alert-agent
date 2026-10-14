@@ -3,8 +3,8 @@ main.py
 Runs the whole pipeline once. This is the file you run:
     python main.py
 
-Current version: stages 1-4 (read alerts, extract jobs, dedupe, status, filters).
-Descriptions, scoring, and the digest email get added in steps 5-7.
+Current version: stages 1-5 (read alerts, extract, dedupe, status, filters, descriptions).
+Scoring and the digest email get added in steps 6-7.
 """
 
 import os
@@ -21,6 +21,7 @@ from gmail_client import (
     PROJECT_FOLDER, build_alert_query, get_gmail_service,
     get_message_bodies, list_message_ids, load_config,
 )
+from describe_agent import describe_jobs
 from filters import apply_filters
 from status import find_status_events
 from store import Store
@@ -85,13 +86,26 @@ def main():
     new_jobs, skipped = remove_duplicates(all_jobs, store.get_known_job_keys())
     print(f"New jobs: {len(new_jobs)}  (skipped {skipped} already seen or applied)")
 
-    # 6. Filters. Every new job is saved, including filtered ones (with the
-    #    reason), so they are never treated as new again.
+    # 6. Filters.
     kept_jobs, reasons = apply_filters(new_jobs, claude, config)
-    store.append_rows("jobs", new_jobs)
     print(f"After filters: {len(kept_jobs)} kept, filtered out: {dict(reasons)}")
 
-    # 7. Log this run.
+    # 7. Find each kept job's posting and pull out the facts for scoring.
+    usage = describe_jobs(kept_jobs, claude, config)
+    found = sum(1 for job in kept_jobs if job["description_found"])
+    # The posting may show a salary the email didn't; re-check the hard floor.
+    for job in kept_jobs:
+        if job["salary_max"] and job["salary_max"] < config["filters"]["salary_floor"]:
+            job["filter_reason"] = "below salary floor"
+    # Haiku: $0.10 / $0.50 per million tokens in / out; web search: $0.01 each.
+    cost = usage["input_tokens"] / 1e6 * 0.10 + usage["output_tokens"] / 1e6 * 0.50 + usage["searches"] * 0.01
+    print(f"Postings found: {found}/{len(kept_jobs)}  ({usage['searches']} web searches, ${cost:.2f})")
+
+    # 8. Save every new job, including filtered ones (with the reason),
+    #    so they are never treated as new again.
+    store.append_rows("jobs", new_jobs)
+
+    # 9. Log this run.
     store.append_rows("runs", [{
         "run_time": run_start,
         "alert_emails_read": len(emails),

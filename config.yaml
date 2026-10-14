@@ -82,8 +82,9 @@ filters:
     - warehouse associate
     - warehouse worker
     - mechanic
-  # Jobs paying less than this (top of range) are kept but flagged.
-  salary_floor: 100000
+  # Salary, judged by the top of the posted range (jobs with no salary are kept).
+  salary_floor: 100000    # hard: below this, the job is filtered out
+  salary_target: 120000   # soft: below this, the job is kept but flagged
   # The roles you want. Claude uses this list to catch other unrelated titles.
   target_roles:
     - Data Engineer

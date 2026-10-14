@@ -8,8 +8,8 @@ Three tables in the job_alerts dataset (think of them like SQL tables in Snowfla
     runs           one row per run of the script
 
 Two BigQuery sandbox rules shape this file:
-1. Tables are deleted 60 days after their "expires" date. Every run pushes that
-   date out to 60 days from now (keep_tables_alive). Run at least every 60 days.
+1. Tables are deleted 60 days after they were created. Every run rebuilds each
+   table (keep_tables_alive), which restarts the clock. Run at least every 60 days.
 2. Sandbox doesn't allow inserting rows one at a time ("streaming") or UPDATE.
    So we only ever ADD rows, using a "load job" (a batch insert).
    A job's status is never stored; it's calculated by a query (get_job_statuses).
@@ -41,6 +41,11 @@ TABLES = {
         ("filter_reason", "STRING"),   # "" = passed, "too senior", "unrelated"
         ("salary_flag", "STRING"),
         ("remote_group", "STRING"),    # Remote, Onsite/Hybrid, Unknown
+        # Filled in by stage 5 (description agent).
+        ("description_found", "BOOL"),
+        ("description_source", "STRING"),
+        ("description_url", "STRING"),
+        ("criteria", "STRING"),        # JSON text; query it with JSON_VALUE / JSON_QUERY_ARRAY
         # Filled in by step 6 (scoring).
         ("experience_fit", "INT64"),
         ("preferences_fit", "INT64"),
@@ -97,12 +102,17 @@ class Store:
 
     def keep_tables_alive(self):
         """
-        Create the dataset and tables if they don't exist yet, then push each
-        table's delete date to 60 days from now (the sandbox maximum).
-        Returns the new delete date.
+        Create the dataset and tables if they don't exist yet, add any new
+        columns, then REBUILD each table so its 60-day clock starts over.
+
+        Why rebuild: in sandbox mode a table is deleted 60 days after it was
+        CREATED, and that date can't be pushed later. A rebuilt table counts
+        as newly created, so it gets a fresh 60 days. All rows are kept.
+        (Tested 2026-10-14: a 5-day-old table got created=today, rows intact.)
+
+        Returns the earliest delete date across the tables.
         """
         self.client.create_dataset(f"{self.project}.{self.dataset}", exists_ok=True)
-        expires = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=60)
 
         for name, columns in TABLES.items():
             schema = [bigquery.SchemaField(col, typ) for col, typ in columns]
@@ -114,15 +124,17 @@ class Store:
             # add them to the real table too (like ALTER TABLE ADD COLUMN).
             existing = {field.name for field in table.schema}
             missing = [field for field in schema if field.name not in existing]
-            fields_to_update = ["expires"]
             if missing:
                 table.schema = list(table.schema) + missing
-                fields_to_update.append("schema")
+                self.client.update_table(table, ["schema"])
 
-            table.expires = expires
-            self.client.update_table(table, fields_to_update)
+            # Same idea as in Snowflake: replace the table with a copy of itself.
+            self.client.query(
+                f"CREATE OR REPLACE TABLE `{self.table_id(name)}` AS "
+                f"SELECT * FROM `{self.table_id(name)}`"
+            ).result()
 
-        return expires
+        return min(self.client.get_table(self.table_id(name)).expires for name in TABLES)
 
     # -------------------------------------------------------------------
     # Reading

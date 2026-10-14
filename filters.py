@@ -3,8 +3,8 @@ filters.py
 Stage 4: decide which new jobs are worth looking at.
 
 Every job gets three new fields:
-    filter_reason  ""  (passes), "too senior", or "unrelated"
-    salary_flag    ""  or "Below floor, discuss"  (flagged, never dropped)
+    filter_reason  ""  (passes), "too senior", "unrelated", or "below salary floor"
+    salary_flag    ""  or "Below $120K target"  (soft target: flagged, not dropped)
     remote_group   "Remote", "Onsite/Hybrid", or "Unknown"
                    (Unknown is checked again in stage 5 using the full description)
 
@@ -35,11 +35,16 @@ def remote_group(job):
     return "Unknown"
 
 
-def salary_flag(job, floor):
-    """Flag jobs whose best possible pay is under the floor. No salary = no flag."""
-    top = job.get("salary_max") or job.get("salary_min")
-    if top and top < floor:
-        return "Below floor, discuss"
+def top_salary(job):
+    """Best possible pay for the job, or None if no salary was posted."""
+    return job.get("salary_max") or job.get("salary_min")
+
+
+def salary_flag(job, target):
+    """Flag jobs whose best possible pay is under the soft target. No salary = no flag."""
+    top = top_salary(job)
+    if top and top < target:
+        return f"Below ${target // 1000}K target"
     return ""
 
 
@@ -128,8 +133,11 @@ def apply_filters(jobs, client, config):
     # Free checks first.
     for job in jobs:
         job["remote_group"] = remote_group(job)
-        job["salary_flag"] = salary_flag(job, rules["salary_floor"])
-        if has_any_word(job["title"], rules["too_senior_words"]):
+        job["salary_flag"] = salary_flag(job, rules["salary_target"])
+        top = top_salary(job)
+        if top and top < rules["salary_floor"]:
+            job["filter_reason"] = "below salary floor"
+        elif has_any_word(job["title"], rules["too_senior_words"]):
             job["filter_reason"] = "too senior"
         elif has_any_word(job["title"], rules["unrelated_keywords"]):
             job["filter_reason"] = "unrelated"
