@@ -1,6 +1,6 @@
 """
 score.py
-Stage 6: score each job with Claude Sonnet, using my rubric and resumes.
+Stage 6: score each job with Claude (model set in config.yaml), using my rubric and resumes.
 
 What Claude gets for every job:
   - system prompt: scoring_rubric.md + every resume in resumes/ (the same for
@@ -18,6 +18,9 @@ from gmail_client import PROJECT_FOLDER
 from resumes import load_resumes
 
 LIKELIHOOD = ["very low", "low", "medium", "high", "very high"]
+
+# Dollars per million tokens: (input, output).
+PRICES = {"claude-haiku-5-5": (0.10, 0.50), "claude-sonnet-5-5": (2.00, 10.00)}
 
 
 def build_system_prompt():
@@ -125,14 +128,15 @@ def score_jobs(jobs, client, config):
     with ThreadPoolExecutor(max_workers=8) as pool:
         results += list(pool.map(safe_score, jobs[1:]))
 
-    # Sonnet 5.5 prices per million tokens: $2 input, $10 output,
-    # $0.20 cache read, $2.50 cache write (1.25x input).
+    # Price per million tokens: input, output. Cache reads cost 0.1x input,
+    # cache writes 1.25x input.
+    input_price, output_price = PRICES[model]
     cost = 0.0
     for job, (scores, usage) in zip(jobs, results):
         if usage:
-            cost += (usage.input_tokens * 2 + usage.output_tokens * 10
-                     + (usage.cache_read_input_tokens or 0) * 0.20
-                     + (usage.cache_creation_input_tokens or 0) * 2.50) / 1e6
+            cost += (usage.input_tokens * input_price + usage.output_tokens * output_price
+                     + (usage.cache_read_input_tokens or 0) * input_price * 0.1
+                     + (usage.cache_creation_input_tokens or 0) * input_price * 1.25) / 1e6
         if not scores:
             continue
         for key in ("company_summary", "experience_fit", "interview_likelihood",

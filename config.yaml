@@ -25,11 +25,11 @@ alert_senders:
 first_run_lookback_days: 7
 
 # Which Claude model does which job.
-# Haiku is cheap and good at simple reading; Sonnet is smarter for judging fit.
+# All Haiku: cheapest. For sharper scores, set score to claude-sonnet-5-5 (~10x the cost).
 models:
   extract: claude-haiku-5-5     # stage 2: pull jobs out of emails
   describe: claude-haiku-5-5    # stage 5: find full job descriptions
-  score: claude-sonnet-5-5      # stage 6: score each job against your profile
+  score: claude-haiku-5-5       # stage 6: score each job against your profile
   status: claude-haiku-5-5      # stage 3: read application / rejection / interview emails
 
 # Where jobs are stored (BigQuery, free sandbox mode).
